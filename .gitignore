@@ -1,3 +1,5 @@
 downloaded_photos/
 credentials.json
 token.json
+__pycache__/
+venv/
