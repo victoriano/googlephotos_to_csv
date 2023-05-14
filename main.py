@@ -36,7 +36,7 @@ def setup_google_photos_api():
 
     return build("photoslibrary", "v1", credentials=creds, static_discovery=False)
 
-def download_photos(api, folder_path, num_photos, category="library", favorites=False, download_images=True, resolution=None):
+def download_photos(api, folder_path, num_photos, category, favorites=False, download_images=None, camera_model=None, resolution=None):
     try:
         os.makedirs(folder_path, exist_ok=True)
 
@@ -47,30 +47,40 @@ def download_photos(api, folder_path, num_photos, category="library", favorites=
         while num_photos > 0:
             body = {
                 "pageSize": page_size,
-                "pageToken": next_page_token
+                "pageToken": next_page_token,
             }
 
-            if category.startswith("album:"):
-                body["albumId"] = category.split("album:")[-1]
-            else:
-                body["filters"] = {"includeArchivedMedia": False}
+            filters = {}
 
-                if favorites:
-                    body["filters"]["featureFilter"] = {
-                        "includedFeatures": ["FAVORITES"]
-                    }
+            if favorites:
+                filters["includeArchivedMedia"] = False
+                filters["featureFilter"] = {
+                    "includedFeatures": ["FAVORITES"]
+                }
+                body["filters"] = filters
+
+            if category.startswith("album:"):
+                body["albumId"] = category.split(':')[1]
+            
+            #print("this is the body:")
+            #print(body)
 
             results = api.mediaItems().search(
                 body=body
             ).execute()
 
-            items.extend(results.get("mediaItems", []))
+            items = results.get("mediaItems", [])
 
             for item in items:
+                if camera_model and "cameraModel" not in item.get('mediaMetadata', {}).get('photo', {}):
+                    continue
+
                 print(f"Getting data from {item['filename']}...")
+
                 url = item["baseUrl"]
                 if resolution:
                     url += f"=w{resolution}"
+
                 urls.append(url)
 
                 if download_images:
@@ -96,9 +106,9 @@ def download_photos(api, folder_path, num_photos, category="library", favorites=
                 if num_photos <= 0:
                     break
 
-                next_page_token = results.get("nextPageToken", "")
-                if not next_page_token:
-                    break
+            next_page_token = results.get("nextPageToken", "")
+            if not next_page_token:
+                break
 
         return items, urls
 
@@ -107,12 +117,13 @@ def download_photos(api, folder_path, num_photos, category="library", favorites=
         return
 
 
-def main(num_photos_to_download, category, favorites, download_images, resolution):
+
+def main(num_photos_to_download, category, favorites, download_images, camera_model, resolution):
     # Set the output folder
     output_folder = "downloaded_photos"
 
     google_photos_api = setup_google_photos_api()
-    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, category, favorites, download_images, resolution)
+    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, category, favorites, download_images, camera_model, resolution)
 
     create_metadata_csv(output_folder, items, urls)
 
@@ -124,7 +135,8 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--favorites', action='store_true', help='Download only favorite photos')
     parser.add_argument('-d', '--download', action='store_true', help='Download photos')
     parser.add_argument('-r', '--resolution', type=str, help='Resolution for downloaded photos')
+    parser.add_argument('-cm', '--camera_model', action='store_true', help='Only download photos with camera model in metadata')
 
     args = parser.parse_args()
 
-    main(args.num_photos, args.category, args.favorites, args.download, args.resolution)
+    main(args.num_photos, args.category, args.favorites, args.download, args.camera_model, args.resolution)
