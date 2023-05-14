@@ -8,6 +8,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from PIL import Image
 from io import BytesIO
+from metadata import create_metadata_csv
+
 
 # Set up Google Photos API
 def setup_google_photos_api():
@@ -31,7 +33,10 @@ def setup_google_photos_api():
 
     return build("photoslibrary", "v1", credentials=creds, static_discovery=False)
 
-# Download photos
+
+import imageio
+from PIL import Image
+
 def download_photos(api, folder_path, num_photos):
     try:
         os.makedirs(folder_path, exist_ok=True)
@@ -39,7 +44,6 @@ def download_photos(api, folder_path, num_photos):
         next_page_token = ""
         page_size = min(num_photos, 100)
         while num_photos > 0:
-            # Add the "filters" parameter to search for favorited items
             results = api.mediaItems().search(
                 body={
                     "pageSize": page_size,
@@ -56,21 +60,32 @@ def download_photos(api, folder_path, num_photos):
             items = results.get("mediaItems", [])
 
             for item in items:
-                # https://developers.google.com/photos/library/reference/rest/v1/mediaItems#MediaItem
                 print(f"Downloading {item['filename']}...")
 
                 url = item["baseUrl"]
                 url += "=w1800"
 
                 response = requests.get(url)
-                image = Image.open(BytesIO(response.content))
                 file_ext = os.path.splitext(item["filename"])[1]
 
-                if file_ext.lower() in Image.EXTENSION:
+                if file_ext.lower() in [".jpg", ".png"]:
+                    image = Image.open(BytesIO(response.content))
                     image.save(os.path.join(folder_path, item["filename"]))
+                elif file_ext.lower() == ".dng":
+                    try:
+                        img_data = imageio.imread(BytesIO(response.content))
+                        output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
+                        imageio.imsave(os.path.join(folder_path, output_filename), img_data)
+                    except Exception as e:
+                        print(f"Error processing {item['filename']}: {e}")
+                        continue
+                elif file_ext.lower() == ".heic":
+                    print(f"Skipping {item['filename']}: HEIC format not supported")
+                    continue
                 else:
                     print(f"Cannot save {item['filename']}: unsupported file format")
                     continue
+
 
                 if "mediaMetadata" in item:
                     exif_filename = os.path.splitext(item["filename"])[0] + "_exif.json"
@@ -82,22 +97,26 @@ def download_photos(api, folder_path, num_photos):
                 if num_photos <= 0:
                     break
 
-
             next_page_token = results.get("nextPageToken", "")
             if not next_page_token:
                 break
+
+        return items
 
     except HttpError as error:
         print(f"An error occurred: {error}")
         return
 
+    
 def main():
     # Set the output folder and number of photos to download
     output_folder = "downloaded_photos"
-    num_photos_to_download = 20
+    num_photos_to_download = 10
 
     google_photos_api = setup_google_photos_api()
-    download_photos(google_photos_api, output_folder, num_photos_to_download)
+    items = download_photos(google_photos_api, output_folder, num_photos_to_download)
+
+    create_metadata_csv(output_folder, items)
 
 if __name__ == "__main__":
     main()
