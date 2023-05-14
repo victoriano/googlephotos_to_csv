@@ -1,44 +1,65 @@
-# Google Photos Downloader
+# Google Photos Downloader and Metadata Collector
 
-## SYNOPSIS
+This script downloads photos from Google Photos and collects metadata.
 
-`google_photos_downloader.py [-n NUM_PHOTOS] [-d] [-r RESOLUTION]`
+Author: Victoriano Izquierdo ([Twitter](https://twitter.com/victorianoi))
 
-## DESCRIPTION
+## Prerequisites
 
-This script allows you to download your Google Photos, optionally at a custom resolution, and generates a CSV file with metadata for each photo. It can also handle HEIC files, but does not convert them to JPEG by default.
+1. Python 3
+2. Google Photos API credentials (follow the [official guide](https://developers.google.com/photos/library/guides/get-started-python) to get these)
+3. Libraries: `google-auth`, `google-auth-oauthlib`, `google-auth-httplib2`, `google-api-python-client`, `Pillow`, `imageio`, `requests`
 
-## OPTIONS
+Install the required libraries using pip:
 
-`-n, --num_photos NUM_PHOTOS`
-: The number of photos to download. Defaults to 100.
+```
+pip install --upgrade google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client Pillow imageio requests
+```
 
-`-d, --download`
-: Include this flag to download the photos. If not included, the script will only generate metadata.
+## Usage
 
-`-r, --resolution RESOLUTION`
-: The width in pixels of the downloaded photos. If not specified, photos will be downloaded at their original resolution.
+```
+python main.py [options]
+```
 
-## EXAMPLES
+### Options
 
-`python google_photos_downloader.py --num_photos 200 --download --resolution 3000`
-: This command will download 200 photos with a width of 3000 pixels.
+- `-n` / `--num_photos`: Number of photos to download. Default is 10.
+- `-c` / `--category`: Category of photos to download. Can be "library", "favorites", or "album:[ALBUM_ID]" (replace [ALBUM_ID] with the ID of the album). Default is "library".
+- `-f` / `--favorites`: If set, only download favorite photos. Not applicable when downloading from a specific album.
+- `-d` / `--download`: If set, download photos. If not set, only metadata will be collected.
+- `-r` / `--resolution`: Resolution for downloaded photos. Specify the maximum width in pixels (height will be adjusted to maintain aspect ratio). If not set, the default resolution provided by Google Photos will be used.
 
-`python google_photos_downloader.py --num_photos 100`
-: This command will generate metadata for 100 photos, but will not download the photos.
+### Examples
 
-## NOTES
+Download 20 photos from your library:
 
-This script requires the `google-auth-oauthlib`, `google-auth-httplib2`, `google-api-python-client`, `Pillow`, and `imageio` libraries.
+```
+python main.py -n 20 -d
+```
 
-## AUTHOR
+Download 10 favorite photos:
 
-Written by Victoriano Izquierdo. You can reach out to him on Twitter [@victorianoi](https://twitter.com/victorianoi).
+```
+python main.py -n 10 -c favorites -d
+```
 
-## REPORTING BUGS
+Collect metadata for 50 photos from a specific album (replace [ALBUM_ID] with the ID of the album):
 
-Report bugs to Victoriano Izquierdo via Twitter [@victorianoi](https://twitter.com/victorianoi).
+```
+python main.py -n 50 -c album:[ALBUM_ID]
+```
 
-## COPYRIGHT
+Download 30 photos from your library at a resolution of 1920 pixels wide:
 
-Copyright © 2023 Victoriano Izquierdo. License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>. This is free software: you are free to change and redistribute it. There is NO WARRANTY, to the extent permitted by law.
+```
+python main.py -n 30 -d -r 1920
+```
+
+## Output
+
+The script will create a "downloaded_photos" folder in the same directory as the script. This folder will contain the downloaded photos and a "metadata.csv" file with metadata for each photo.
+
+---
+
+Please replace the `[ALBUM_ID]` with the actual Album ID in the usage examples.

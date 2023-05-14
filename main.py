@@ -25,8 +25,10 @@ def setup_google_photos_api():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_path,
-                                                             ["https://www.googleapis.com/auth/photoslibrary.readonly"])
+            flow = InstalledAppFlow.from_client_secrets_file(
+                credentials_path,
+                ["https://www.googleapis.com/auth/photoslibrary.readonly"]
+            )
             creds = flow.run_local_server(port=0)
 
         with open(token_path, "w") as token_file:
@@ -34,8 +36,7 @@ def setup_google_photos_api():
 
     return build("photoslibrary", "v1", credentials=creds, static_discovery=False)
 
-
-def download_photos(api, folder_path, num_photos, download_images=True, resolution=None):
+def download_photos(api, folder_path, num_photos, category="library", favorites=False, download_images=True, resolution=None):
     try:
         os.makedirs(folder_path, exist_ok=True)
 
@@ -44,29 +45,32 @@ def download_photos(api, folder_path, num_photos, download_images=True, resoluti
         items = []  # Initialize items here
         urls = []   # Initialize urls here too, for consistency
         while num_photos > 0:
-            results = api.mediaItems().search(
-                body={
-                    "pageSize": page_size,
-                    "pageToken": next_page_token,
-                    "filters": {
-                        "includeArchivedMedia": False,
-                        "featureFilter": {
-                            "includedFeatures": ["FAVORITES"]
-                        }
+            body = {
+                "pageSize": page_size,
+                "pageToken": next_page_token
+            }
+
+            if category.startswith("album:"):
+                body["albumId"] = category.split("album:")[-1]
+            else:
+                body["filters"] = {"includeArchivedMedia": False}
+
+                if favorites:
+                    body["filters"]["featureFilter"] = {
+                        "includedFeatures": ["FAVORITES"]
                     }
-                }
+
+            results = api.mediaItems().search(
+                body=body
             ).execute()
 
-            items = results.get("mediaItems", [])
+            items.extend(results.get("mediaItems", []))
 
             for item in items:
-
                 print(f"Getting data from {item['filename']}...")
-
                 url = item["baseUrl"]
                 if resolution:
                     url += f"=w{resolution}"
-
                 urls.append(url)
 
                 if download_images:
@@ -74,27 +78,27 @@ def download_photos(api, folder_path, num_photos, download_images=True, resoluti
                     response = requests.get(url)
                     file_ext = os.path.splitext(item["filename"])[1]
                     if file_ext.lower() in [".jpg", ".png", ".heic"]:
-                            with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
-                                img_file.write(response.content)
+                        with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
+                            img_file.write(response.content)
                     elif file_ext.lower() == ".dng":
-                            try:
-                                img_data = imageio.imread(BytesIO(response.content))
-                                output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
-                                imageio.imsave(os.path.join(folder_path, output_filename), img_data)
-                            except Exception as e:
-                                print(f"Error processing {item['filename']}: {e}")
-                                continue
-                    else:
-                            print(f"Cannot save {item['filename']}: unsupported file format")
+                        try:
+                            img_data = imageio.imread(BytesIO(response.content))
+                            output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
+                            imageio.imsave(os.path.join(folder_path, output_filename), img_data)
+                        except Exception as e:
+                            print(f"Error processing {item['filename']}: {e}")
                             continue
+                    else:
+                        print(f"Cannot save {item['filename']}: unsupported file format")
+                        continue
 
                 num_photos -= 1
                 if num_photos <= 0:
                     break
 
-            next_page_token = results.get("nextPageToken", "")
-            if not next_page_token:
-                break
+                next_page_token = results.get("nextPageToken", "")
+                if not next_page_token:
+                    break
 
         return items, urls
 
@@ -102,24 +106,25 @@ def download_photos(api, folder_path, num_photos, download_images=True, resoluti
         print(f"An error occurred: {error}")
         return
 
-    
-def main(num_photos_to_download, download_images, resolution):
+
+def main(num_photos_to_download, category, favorites, download_images, resolution):
     # Set the output folder
     output_folder = "downloaded_photos"
 
     google_photos_api = setup_google_photos_api()
-    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, download_images, resolution)
+    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, category, favorites, download_images, resolution)
 
     create_metadata_csv(output_folder, items, urls)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download photos from Google Photos.')
     parser.add_argument('-n', '--num_photos', type=int, default=10, help='Number of photos to download')
+    parser.add_argument('-c', '--category', type=str, default='library', help='Category of photos to download. Options: library, favorites, album:ALBUM_ID')
+    parser.add_argument('-f', '--favorites', action='store_true', help='Download only favorite photos')
     parser.add_argument('-d', '--download', action='store_true', help='Download photos')
     parser.add_argument('-r', '--resolution', type=str, help='Resolution for downloaded photos')
 
     args = parser.parse_args()
 
-    #python main.py -n 4 -d -r 3000
-    #python main.py -n 4
-    main(args.num_photos, args.download, args.resolution)
+    main(args.num_photos, args.category, args.favorites, args.download, args.resolution)
