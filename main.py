@@ -49,6 +49,13 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
                 "pageSize": page_size,
                 "pageToken": next_page_token,
             }
+            
+            print("next page token:")
+            print(next_page_token)
+            print("num photos:")
+            print(num_photos)
+            print("page_size:")
+            print(page_size)
 
             filters = {}
 
@@ -69,7 +76,7 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
                 body=body
             ).execute()
 
-            items = results.get("mediaItems", [])
+            items += results.get("mediaItems", [])
 
             for item in items:
                 photo_metadata = item.get('mediaMetadata', {}).get('photo', {})
@@ -105,12 +112,17 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
 
                 num_photos -= 1
                 if num_photos <= 0:
-                    break
+                    print("Done here!")
+                    print(len(items))
+                    return items, urls
+                    #break
 
             next_page_token = results.get("nextPageToken", "")
             if not next_page_token:
                 break
-
+        
+        print("Done!")
+        print(len(items))
         return items, urls
 
     except HttpError as error:
