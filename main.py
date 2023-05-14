@@ -72,7 +72,8 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
             items = results.get("mediaItems", [])
 
             for item in items:
-                if camera_model and "cameraModel" not in item.get('mediaMetadata', {}).get('photo', {}):
+                photo_metadata = item.get('mediaMetadata', {}).get('photo', {})
+                if camera_model and (not photo_metadata or 'cameraModel' not in photo_metadata):
                     continue
 
                 print(f"Getting data from {item['filename']}...")
