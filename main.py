@@ -12,7 +12,6 @@ import imageio
 from io import BytesIO
 from metadata import create_metadata_csv
 
-
 # Set up Google Photos API
 def setup_google_photos_api():
     creds = None
