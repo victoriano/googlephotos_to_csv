@@ -36,7 +36,7 @@ def setup_google_photos_api():
     return build("photoslibrary", "v1", credentials=creds, static_discovery=False)
 
 
-def download_photos(api, folder_path, num_photos, download_images=True):
+def download_photos(api, folder_path, num_photos, download_images=True, resolution=None):
     try:
         os.makedirs(folder_path, exist_ok=True)
 
@@ -61,31 +61,33 @@ def download_photos(api, folder_path, num_photos, download_images=True):
             items = results.get("mediaItems", [])
 
             for item in items:
-                print(f"Downloading {item['filename']}...")
+
+                print(f"Getting data from {item['filename']}...")
 
                 url = item["baseUrl"]
-                url += "=w1800"
+                if resolution:
+                    url += f"=w{resolution}"
 
                 urls.append(url)
 
-                response = requests.get(url)
-                file_ext = os.path.splitext(item["filename"])[1]
-
                 if download_images:
+                    print(f"Downloading {item['filename']}...")
+                    response = requests.get(url)
+                    file_ext = os.path.splitext(item["filename"])[1]
                     if file_ext.lower() in [".jpg", ".png", ".heic"]:
-                        with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
-                            img_file.write(response.content)
+                            with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
+                                img_file.write(response.content)
                     elif file_ext.lower() == ".dng":
-                        try:
-                            img_data = imageio.imread(BytesIO(response.content))
-                            output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
-                            imageio.imsave(os.path.join(folder_path, output_filename), img_data)
-                        except Exception as e:
-                            print(f"Error processing {item['filename']}: {e}")
-                            continue
+                            try:
+                                img_data = imageio.imread(BytesIO(response.content))
+                                output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
+                                imageio.imsave(os.path.join(folder_path, output_filename), img_data)
+                            except Exception as e:
+                                print(f"Error processing {item['filename']}: {e}")
+                                continue
                     else:
-                        print(f"Cannot save {item['filename']}: unsupported file format")
-                        continue
+                            print(f"Cannot save {item['filename']}: unsupported file format")
+                            continue
 
                 num_photos -= 1
                 if num_photos <= 0:
@@ -102,20 +104,23 @@ def download_photos(api, folder_path, num_photos, download_images=True):
         return
 
     
-def main(num_photos_to_download, download_images):
+def main(num_photos_to_download, download_images, resolution):
     # Set the output folder
     output_folder = "downloaded_photos"
 
     google_photos_api = setup_google_photos_api()
-    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, download_images)
+    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, download_images, resolution)
 
     create_metadata_csv(output_folder, items, urls)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download photos from Google Photos.')
-    parser.add_argument('-n', '--num_photos', type=int, default=100, help='Number of photos to download')
+    parser.add_argument('-n', '--num_photos', type=int, default=10, help='Number of photos to download')
     parser.add_argument('-d', '--download', action='store_true', help='Download photos')
+    parser.add_argument('-r', '--resolution', type=str, help='Resolution for downloaded photos')
 
     args = parser.parse_args()
 
-    main(args.num_photos, args.download)
+    #python main.py -n 4 -d -r 3000
+    #python main.py -n 4
+    main(args.num_photos, args.download, args.resolution)
