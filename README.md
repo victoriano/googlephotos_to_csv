@@ -7,7 +7,7 @@ Author: Victoriano Izquierdo ([Twitter](https://twitter.com/victorianoi))
 ## Prerequisites
 
 1. Python 3
-2. Google Photos API credentials (follow the [official guide](https://developers.google.com/photos/library/guides/get-started-python) to get these)
+2. Google Photos API credentials (follow the [official guide](https://developers.google.com/photos/library/guides/get-started) to get these)
 3. Libraries: `google-auth`, `google-auth-oauthlib`, `google-auth-httplib2`, `google-api-python-client`, `Pillow`, `imageio`, `requests`
 
 Install the required libraries using pip:
