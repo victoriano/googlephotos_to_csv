@@ -42,20 +42,24 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
 
         next_page_token = ""
         page_size = min(num_photos, 100)
-        items = []  # Initialize items here
+        total_items = []  # Initialize items here
         urls = []   # Initialize urls here too, for consistency
+        
+        #Start iterating through all the photos, one iteration at a time.
         while num_photos > 0:
             body = {
                 "pageSize": page_size,
                 "pageToken": next_page_token,
             }
             
-            print("next page token:")
-            print(next_page_token)
-            print("num photos:")
-            print(num_photos)
-            print("page_size:")
-            print(page_size)
+            #print("next page token:")
+            #print(next_page_token)
+            #print("num photos:")
+            #print(num_photos)
+            print("total_items:")
+            print(len(total_items))
+            #print("page_size:")
+            #print(page_size)
 
             filters = {}
 
@@ -72,12 +76,17 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
             #print("this is the body:")
             #print(body)
 
+            #Make the API call to get the photos for this iteration
             results = api.mediaItems().search(
                 body=body
             ).execute()
+            
+            #Collect Items for this iteration
+            items = []
+            items = results.get("mediaItems", [])
 
-            items += results.get("mediaItems", [])
-
+            #Iterate through each item and get the URL for each photo to download them or include them in the metadata CSV
+            #if they follow the cameraModel filter criteria
             for item in items:
                 photo_metadata = item.get('mediaMetadata', {}).get('photo', {})
                 if camera_model and (not photo_metadata or 'cameraModel' not in photo_metadata):
@@ -89,7 +98,9 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
                 if resolution:
                     url += f"=w{resolution}"
 
+                #Add the item to the list of items to return
                 urls.append(url)
+                total_items.append(item)
 
                 if download_images:
                     print(f"Downloading {item['filename']}...")
@@ -112,18 +123,15 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
 
                 num_photos -= 1
                 if num_photos <= 0:
-                    print("Done here!")
-                    print(len(items))
-                    return items, urls
-                    #break
+                    break
 
             next_page_token = results.get("nextPageToken", "")
             if not next_page_token:
                 break
         
         print("Done!")
-        print(len(items))
-        return items, urls
+        print(len(total_items))
+        return total_items, urls
 
     except HttpError as error:
         print(f"An error occurred: {error}")
