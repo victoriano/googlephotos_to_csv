@@ -36,7 +36,49 @@ def setup_google_photos_api():
 
     return build("photoslibrary", "v1", credentials=creds, static_discovery=False)
 
-def download_photos(api, folder_path, num_photos, category, favorites=False, download_images=None, camera_model=None, resolution=None):
+def get_photo_url(item, resolution=None):
+    url = item["baseUrl"]
+    if resolution:
+        url += f"=w{resolution}"
+    return url
+
+def download_photo(url, item, folder_path):
+    print(f"Downloading {item['filename']}...")
+    response = requests.get(url)
+    file_ext = os.path.splitext(item["filename"])[1]
+    if file_ext.lower() in [".jpg", ".png", ".heic"]:
+        with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
+            img_file.write(response.content)
+    elif file_ext.lower() == ".dng":
+        try:
+            img_data = imageio.imread(BytesIO(response.content))
+            output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
+            imageio.imsave(os.path.join(folder_path, output_filename), img_data)
+        except Exception as e:
+            print(f"Error processing {item['filename']}: {e}")
+    else:
+        print(f"Cannot save {item['filename']}: unsupported file format")
+
+def process_photo_items(items, download_images, camera_model, folder_path, resolution):
+    urls = []
+    total_items = []
+
+    for item in items:
+        photo_metadata = item.get('mediaMetadata', {}).get('photo', {})
+        if camera_model and ('cameraMake' not in photo_metadata or 'cameraModel' not in photo_metadata):
+            continue
+
+        print(f"Getting data from {item['filename']}...")
+
+        url = get_photo_url(item, resolution)
+        urls.append(url)
+        total_items.append(item)
+
+        if download_images:
+            download_photo(url, item, folder_path)
+    return total_items, urls
+
+def retrieve_photos(api, folder_path, num_photos, category, favorites=False, download_images=None, camera_model=None, resolution=None):
     try:
         os.makedirs(folder_path, exist_ok=True)
 
@@ -44,37 +86,25 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
         page_size = min(num_photos, 100)
         total_items = []  # Initialize items here
         urls = []   # Initialize urls here too, for consistency
-        
-        #Start iterating through all the photos, one iteration at a time.
+
         while num_photos > 0:
             body = {
                 "pageSize": page_size,
                 "pageToken": next_page_token,
             }
-            
-            #print("next page token:")
-            #print(next_page_token)
-            #print("num photos:")
-            #print(num_photos)
-            print("total_items:")
-            print(len(total_items))
-            #print("page_size:")
-            #print(page_size)
 
             filters = {}
 
             if favorites:
                 filters["includeArchivedMedia"] = False
                 filters["featureFilter"] = {
+                   
                     "includedFeatures": ["FAVORITES"]
                 }
                 body["filters"] = filters
 
             if category.startswith("album:"):
                 body["albumId"] = category.split(':')[1]
-            
-            #print("this is the body:")
-            #print(body)
 
             #Make the API call to get the photos for this iteration
             results = api.mediaItems().search(
@@ -85,48 +115,14 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
             items = []
             items = results.get("mediaItems", [])
 
-            #Iterate through each item and get the URL for each photo to download them or include them in the metadata CSV
-            #if they follow the cameraModel filter criteria
-            for item in items:
-                photo_metadata = item.get('mediaMetadata', {}).get('photo', {})
-                if camera_model and (not photo_metadata or 'cameraModel' not in photo_metadata):
-                    continue
+            # Process items
+            items, current_urls = process_photo_items(items, download_images, camera_model, folder_path, resolution)
+            total_items.extend(items)
+            urls.extend(current_urls)
 
-                print(f"Getting data from {item['filename']}...")
-
-                url = item["baseUrl"]
-                if resolution:
-                    url += f"=w{resolution}"
-
-                #Add the item to the list of items to return
-                urls.append(url)
-                total_items.append(item)
-
-                if download_images:
-                    print(f"Downloading {item['filename']}...")
-                    response = requests.get(url)
-                    file_ext = os.path.splitext(item["filename"])[1]
-                    if file_ext.lower() in [".jpg", ".png", ".heic"]:
-                        with open(os.path.join(folder_path, item["filename"]), "wb") as img_file:
-                            img_file.write(response.content)
-                    elif file_ext.lower() == ".dng":
-                        try:
-                            img_data = imageio.imread(BytesIO(response.content))
-                            output_filename = os.path.splitext(item["filename"])[0] + ".png"  # Convert DNG to PNG
-                            imageio.imsave(os.path.join(folder_path, output_filename), img_data)
-                        except Exception as e:
-                            print(f"Error processing {item['filename']}: {e}")
-                            continue
-                    else:
-                        print(f"Cannot save {item['filename']}: unsupported file format")
-                        continue
-
-                num_photos -= 1
-                if num_photos <= 0:
-                    break
-
+            num_photos -= len(items)
             next_page_token = results.get("nextPageToken", "")
-            if not next_page_token:
+            if not next_page_token or num_photos <= 0:
                 break
         
         print("Done!")
@@ -135,19 +131,16 @@ def download_photos(api, folder_path, num_photos, category, favorites=False, dow
 
     except HttpError as error:
         print(f"An error occurred: {error}")
-        return
-
-
+        return [], []
 
 def main(num_photos_to_download, category, favorites, download_images, camera_model, resolution):
     # Set the output folder
     output_folder = "downloaded_photos"
 
     google_photos_api = setup_google_photos_api()
-    items, urls = download_photos(google_photos_api, output_folder, num_photos_to_download, category, favorites, download_images, camera_model, resolution)
+    items, urls = retrieve_photos(google_photos_api, output_folder, num_photos_to_download, category, favorites, download_images, camera_model, resolution)
 
     create_metadata_csv(output_folder, items, urls)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download photos from Google Photos.')
